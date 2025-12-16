@@ -1,27 +1,67 @@
-Smart Public Grievance Redressal and Monitoring System (MERN Stack)
+Smart Public Grievance Redressal and Monitoring System
 
-The Smart Public Grievance Redressal and Monitoring System is a web-based application developed using the MERN stack (MongoDB, Express.js, React.js, Node.js) to address the real-world issue of lack of transparency, accountability, and efficiency in traditional public grievance handling mechanisms.
+A MERN-based working prototype designed to improve transparency, accountability, and efficiency in public grievance handling. The system enables citizens to raise grievances, department officers to resolve them, and administrators to monitor the entire workflow through a centralized platform.
 
-The system provides a structured, end-to-end grievance workflow that allows citizens to submit complaints digitally and track their progress in real time. It is designed with three distinct roles:
+Problem Statement
 
-Citizen – Can submit grievances, attach supporting evidence, track status updates, and provide feedback after resolution.
+Traditional grievance systems lack real-time tracking, transparency, and accountability, leading to delayed resolutions and poor citizen trust.
 
-Department Officer – Views assigned grievances, updates status, adds resolution notes, and communicates with citizens.
+Solution Overview
 
-Admin – Monitors all grievances across departments, assigns complaints, oversees resolution timelines, and ensures accountability.
+This system provides a clear end-to-end grievance lifecycle with role-based access, status tracking, and basic AI-assisted classification to prioritize complaints effectively.
 
-The application emphasizes process clarity rather than full production scale, making it suitable as a working prototype. To enhance efficiency, the system integrates light AI features such as basic grievance classification or priority tagging, helping route complaints effectively and highlight urgent cases.
+Key Features
 
-Key features include:
+Citizen grievance submission with tracking
 
-Role-based authentication and access control
+Officer dashboard for assigned grievances
 
-Real-time grievance status tracking
+Admin monitoring and analytics view
 
-Dashboard-based monitoring for all user roles
+Role-based authentication and authorization
 
-Feedback and closure mechanism for citizens
+Status-based grievance workflow
 
-Clean, intuitive UI designed for government-style portals
+Light AI integration for category and priority tagging
 
-Overall, this project demonstrates how modern web technologies and basic AI assistance can be used to digitize grievance redressal, improve transparency, reduce resolution delays, and enhance trust between citizens and public authorities.
+Responsive and intuitive UI
+
+User Roles
+
+Citizen: Submit grievances, track status, provide feedback
+
+Department Officer: View and resolve assigned grievances
+
+Admin: Monitor all grievances and system activity
+
+Tech Stack
+
+Frontend: React, Tailwind CSS
+
+Backend: Node.js, Express.js
+
+Database: MongoDB
+
+Authentication: JWT-based role access
+
+AI (Basic): Rule-based classification / priority tagging
+
+Project Scope
+
+This is a functional prototype focused on demonstrating system design, workflow clarity, and real-world applicability rather than full production deployment.
+
+Installation (Basic)
+git clone https://github.com/ragul1229/Smart-Grievance-System.git
+cd Smart-Grievance-System
+npm install
+npm start
+
+Author
+
+Ragul J
+Third-Year AI Engineering Student
+Intern at Elcodamics
+
+License
+
+This project is for academic and demonstration purposes only.
