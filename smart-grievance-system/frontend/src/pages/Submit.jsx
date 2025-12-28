@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from "react";
 import api from "../services/api";
 import { getCurrentUser } from "../services/auth";
-import { suggestCategoryPriority, CATEGORIES } from "../utils/classifier";
+import {
+  suggestCategoryPriority,
+  fetchServerSuggestion,
+  CATEGORIES,
+} from "../utils/classifier";
 
 export default function Submit() {
   const user = getCurrentUser();
@@ -27,6 +31,19 @@ export default function Submit() {
         category,
         images,
       });
+      // Duplicate detection: server returns 200 with duplicate info
+      if (res.data && res.data.duplicate) {
+        setMessage(res.data.message || "Similar complaint detected");
+        // Do not clear form so user can modify or cancel
+        setClassification(null);
+        // Save duplicate info to show to user
+        setSuggested((prev) => ({
+          ...(prev || {}),
+          duplicateNotice: res.data.duplicate,
+        }));
+        return;
+      }
+
       setMessage(res.data.message || "Grievance submitted successfully");
       setClassification(res.data.classification || null);
       setTitle("");
@@ -43,9 +60,24 @@ export default function Submit() {
 
   useEffect(() => {
     if (!title && !description) return setSuggested(null);
-    const s = suggestCategoryPriority(title, description);
-    setSuggested(s);
-    if (!category) setCategory(s.category);
+    const local = suggestCategoryPriority(title, description);
+    setSuggested(local);
+    if (!category) setCategory(local.category);
+
+    // Debounced server suggestion (auto-suggest and duplicate check)
+    let canceled = false;
+    const id = setTimeout(async () => {
+      const server = await fetchServerSuggestion(title, description);
+      if (canceled || !server) return;
+      // show server suggestion and information (merge with local)
+      setSuggested((prev) => ({ ...(prev || {}), server }));
+      if (!category && server?.classification?.category)
+        setCategory(server.classification.category);
+    }, 400);
+    return () => {
+      canceled = true;
+      clearTimeout(id);
+    };
   }, [title, description]);
 
   const onImage = (e) => {
@@ -103,9 +135,30 @@ export default function Submit() {
               ))}
             </select>
             {suggested && (
-              <p className="mt-1 text-xs text-gray-500">
-                Suggested priority: <b>{suggested.priority}</b>
-              </p>
+              <div className="mt-1 text-xs text-gray-500">
+                <div>
+                  Suggested priority: <b>{suggested.priority}</b>
+                </div>
+                {suggested.server?.duplicate && (
+                  <div className="mt-1 text-sm text-red-600">
+                    ⚠️ Similar complaint found:{" "}
+                    <b>
+                      {suggested.server.duplicate.grievanceId ||
+                        suggested.server.duplicate.id}
+                    </b>{" "}
+                    (score:{" "}
+                    {Math.round((suggested.server.duplicate.score || 0) * 100) /
+                      100}
+                    )
+                  </div>
+                )}
+                {suggested.server?.suggestedOfficer && (
+                  <div className="mt-1 text-sm text-gray-700">
+                    Suggested officer:{" "}
+                    <b>{suggested.server.suggestedOfficer.officerName}</b>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -121,7 +174,9 @@ export default function Submit() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Attach Image (optional)</label>
+            <label className="block text-sm font-medium">
+              Attach Image (optional)
+            </label>
             <input
               type="file"
               accept="image/*"
@@ -149,14 +204,39 @@ export default function Submit() {
         </form>
 
         {message && (
-          <div className="mt-4 text-sm text-center text-gray-700">{message}</div>
+          <div className="mt-4 text-sm text-center text-gray-700">
+            {message}
+          </div>
+        )}
+
+        {/* Duplicate notice if detected during submit */}
+        {suggested?.duplicateNotice && (
+          <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-800 text-sm border border-red-100">
+            ⚠️ Similar complaint detected:{" "}
+            <b>
+              {suggested.duplicateNotice.grievanceId ||
+                suggested.duplicateNotice.id}
+            </b>
+            <div className="text-xs mt-1">
+              Similarity score:{" "}
+              {Math.round((suggested.duplicateNotice.score || 0) * 100) / 100}
+            </div>
+            <div className="mt-1">
+              You can modify your complaint to add new details or cancel
+              submission.
+            </div>
+          </div>
         )}
 
         {classification && (
           <div className="mt-6 border-t pt-4">
             <h4 className="font-semibold mb-2">AI Classification</h4>
-            <p className="text-sm">Category: <b>{classification.category}</b></p>
-            <p className="text-sm">Priority: <b>{classification.priority}</b></p>
+            <p className="text-sm">
+              Category: <b>{classification.category}</b>
+            </p>
+            <p className="text-sm">
+              Priority: <b>{classification.priority}</b>
+            </p>
             <pre className="mt-2 text-xs bg-gray-100 p-3 rounded-lg overflow-x-auto">
               {JSON.stringify(classification.explanation, null, 2)}
             </pre>

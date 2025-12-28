@@ -5,7 +5,7 @@ const { protect, requireRole } = require('../middleware/auth')
 const Grievance = require('../models/Grievance')
 const User = require('../models/User')
 const Department = require('../models/Department')
-const { classifyComplaint } = require('../utils/classifier')
+const { classifyComplaint, embedText, detectDuplicate, suggestOfficerForCategory } = require('../utils/classifier')
 
 // Submit a grievance (Citizen)
 router.post('/', protect, requireRole(['citizen']), asyncHandler(async (req, res) => {
@@ -15,48 +15,108 @@ router.post('/', protect, requireRole(['citizen']), asyncHandler(async (req, res
     res.status(400)
     throw new Error('Missing title or description')
   }
-  // Classify complaint
-  const { category, priority, explanation } = classifyComplaint(title, description)
-  // Determine default SLA based on priority (hours)
+  // Classify complaint (keyword fallback + later embedding-based checks)
+  let { category, priority, explanation } = classifyComplaint(title, description)
+
+  // Apply rule-based escalation: if priority is set high by keywords, force SLA
   const slaByPriority = { high: 48, medium: 72, low: 168 }
-  const slaHours = slaByPriority[priority] || 72
+  let slaHours = slaByPriority[priority] || 72
 
-  // Try to assign based on category assignments (admin-configured)
-  let assignedOfficerId = undefined
-  let assignedDepartment = undefined
-  const depsWithCategory = await Department.find({ 'categoryAssignments.category': category }).populate('categoryAssignments.officers')
-  if (depsWithCategory && depsWithCategory.length) {
-    // pick a department randomly among matches
-    const dep = depsWithCategory[Math.floor(Math.random() * depsWithCategory.length)]
-    // find the assignment entry
-    const entry = dep.categoryAssignments.find(a => a.category === category)
-    const officersForCat = entry?.officers || []
-    if (officersForCat.length) {
-      const chosen = officersForCat[Math.floor(Math.random() * officersForCat.length)]
-      assignedOfficerId = chosen._id || chosen
-      assignedDepartment = dep._id
+  // Compute embedding and check duplicates
+  try {
+    const embedding = await embedText(`${title} ${description}`)
+    const dup = await detectDuplicate(embedding, 0.86)
+    if (dup) {
+      // mark as duplicate and reference the original
+      const g = await Grievance.create({
+        title,
+        description,
+        citizen: req.user._id,
+        category,
+        priority,
+        slaHours,
+        images,
+        isDuplicate: true,
+        duplicateOf: dup.grievance._id,
+        embedding,
+        status: 'submitted'
+      })
+      // return a specific response indicating duplication
+      return res.status(200).json({ message: 'Duplicate complaint detected', duplicate: { id: dup.grievance._id, grievanceId: dup.grievance.grievanceId, score: dup.score } })
+    } else {
+      // not duplicate: attempt to suggest an officer (best-effort)
+      const suggested = await suggestOfficerForCategory(category)
+      let assignedOfficerId = undefined
+      let assignedDepartment = undefined
+      if (suggested && suggested.officer) {
+        assignedOfficerId = suggested.officer._id
+        assignedDepartment = suggested.department?._id
+      } else {
+        // fallback: random available officer
+        const officer = await User.aggregate([{ $match: { role: 'officer' } }, { $sample: { size: 1 } }])
+        assignedOfficerId = officer[0]?._id
+        assignedDepartment = officer[0]?.department
+      }
+
+      const grievance = await Grievance.create({
+        title,
+        description,
+        citizen: req.user._id,
+        category,
+        priority,
+        slaHours,
+        assignedOfficer: assignedOfficerId,
+        department: assignedDepartment,
+        images,
+        status: assignedOfficerId ? 'assigned' : 'submitted',
+        embedding,
+        suggestedOfficer: suggested?.officer?._id
+      })
+
+      return res.status(201).json({ message: 'Grievance submitted', grievanceId: grievance.grievanceId, classification: { category, priority, explanation } })
     }
-  }
+  } catch (err) {
+    // if embedding fails, fall back to pure keyword flow
+    console.warn('Embedding/duplicate check failed:', err.message)
+    // Try to assign based on category assignments (admin-configured)
+    let assignedOfficerId = undefined
+    let assignedDepartment = undefined
+    const depsWithCategory = await Department.find({ 'categoryAssignments.category': category }).populate('categoryAssignments.officers')
+    if (depsWithCategory && depsWithCategory.length) {
+      // pick a department randomly among matches
+      const dep = depsWithCategory[Math.floor(Math.random() * depsWithCategory.length)]
+      // find the assignment entry
+      const entry = dep.categoryAssignments.find(a => a.category === category)
+      const officersForCat = entry?.officers || []
+      if (officersForCat.length) {
+        const chosen = officersForCat[Math.floor(Math.random() * officersForCat.length)]
+        assignedOfficerId = chosen._id || chosen
+        assignedDepartment = dep._id
+      }
+    }
 
-  // fallback: random officer if no category-based assignment found
-  if (!assignedOfficerId) {
-    const officer = await User.aggregate([{ $match: { role: 'officer' } }, { $sample: { size: 1 } }])
-    assignedOfficerId = officer[0]?._id
-    assignedDepartment = officer[0]?.department
-  }
+    // fallback: random officer if no category-based assignment found
+    if (!assignedOfficerId) {
+      const officer = await User.aggregate([{ $match: { role: 'officer' } }, { $sample: { size: 1 } }])
+      assignedOfficerId = officer[0]?._id
+      assignedDepartment = officer[0]?.department
+    }
 
-  const grievance = await Grievance.create({
-    title,
-    description,
-    citizen: req.user._id,
-    category,
-    priority,
-    slaHours,
-    assignedOfficer: assignedOfficerId,
-    department: assignedDepartment,
-    images,
-    status: assignedOfficerId ? 'assigned' : 'submitted'
-  })
+    const grievance = await Grievance.create({
+      title,
+      description,
+      citizen: req.user._id,
+      category,
+      priority,
+      slaHours,
+      assignedOfficer: assignedOfficerId,
+      department: assignedDepartment,
+      images,
+      status: assignedOfficerId ? 'assigned' : 'submitted'
+    })
+
+    res.status(201).json({ message: 'Grievance submitted', grievanceId: grievance.grievanceId, classification: { category, priority, explanation } })
+  }
 
   res.status(201).json({ message: 'Grievance submitted', grievanceId: grievance.grievanceId, classification: { category, priority, explanation } })
 }))
@@ -138,7 +198,7 @@ router.patch('/:id/assign', protect, requireRole(['admin']), asyncHandler(async 
   res.json({ message: 'Assigned', grievance })
 }))
 
-// Citizen closes with feedback
+// Citizen closes with feedback (analyze sentiment)
 router.patch('/:id/feedback', protect, requireRole(['citizen']), asyncHandler(async (req, res) => {
   const { feedback, closed } = req.body
   const grievance = await Grievance.findById(req.params.id)
@@ -150,7 +210,16 @@ router.patch('/:id/feedback', protect, requireRole(['citizen']), asyncHandler(as
     res.status(403)
     throw new Error('Not your grievance')
   }
-  if (feedback) grievance.feedback = feedback
+  if (feedback) {
+    grievance.feedback = feedback
+    // lazy analyze sentiment using local classifier helper
+    try {
+      const { sentiment } = require('../utils/classifier').analyzeSentiment(feedback)
+      grievance.feedbackSentiment = sentiment
+    } catch (err) {
+      console.warn('Sentiment analysis failed:', err.message)
+    }
+  }
   if (closed) grievance.closedByCitizen = true
   await grievance.save()
   res.json({ message: 'Feedback updated', grievance })

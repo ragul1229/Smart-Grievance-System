@@ -19,6 +19,12 @@ const grievanceSchema = new mongoose.Schema({
   images: [{ type: String }],
   lastNote: { type: String },
   resolvedAt: { type: Date },
+  // ML fields
+  embedding: [{ type: Number }], // sentence embedding for duplicate detection
+  isDuplicate: { type: Boolean, default: false },
+  duplicateOf: { type: mongoose.Schema.Types.ObjectId, ref: 'Grievance' },
+  feedbackSentiment: { type: String, enum: ['positive', 'neutral', 'negative'] },
+  suggestedOfficer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
 // Generate a simple grievanceId and expectedResolutionAt before saving

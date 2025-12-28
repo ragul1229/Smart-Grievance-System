@@ -13,6 +13,8 @@ const PRIORITY_KEYWORDS = {
   low: ['delay', 'noise', 'minor']
 }
 
+import api from '../services/api'
+
 export function suggestCategoryPriority(title, description) {
   const text = `${title} ${description}`.toLowerCase()
   let category = 'general'
@@ -29,6 +31,15 @@ export function suggestCategoryPriority(title, description) {
     if (matchedPriority) break
   }
   return { category, priority, explanation: { matchedCategory, matchedPriority } }
+}
+
+export async function fetchServerSuggestion(title, description) {
+  try {
+    const res = await api.post('/ml/suggest', { title, description })
+    return res.data
+  } catch (err) {
+    return null
+  }
 }
 
 export const CATEGORIES = Object.keys(CATEGORY_KEYWORDS)

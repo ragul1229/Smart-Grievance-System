@@ -102,6 +102,24 @@ export default function AdminHome() {
             <div>No repeated issues detected</div>
           )}
         </div>
+
+        <h3 style={{ marginTop: 16 }}>Top categories (30d)</h3>
+        <div>
+          {data.recentByCategory && data.recentByCategory.length ? (
+            data.recentByCategory.map((r) => (
+              <div key={r._id} style={{ marginBottom: 6 }}>
+                <b>{r._id}</b>: {r.count} reports
+              </div>
+            ))
+          ) : (
+            <div>No trends detected</div>
+          )}
+        </div>
+
+        <h3 style={{ marginTop: 16 }}>Duplicate complaints</h3>
+        <div>
+          <b>{data.duplicateCount ?? 0}</b> complaints detected as duplicates
+        </div>
       </div>
     </div>
   );

@@ -19,9 +19,16 @@ app.use('/api/departments', require('./routes/departments'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/users', require('./routes/users'));
+// ML endpoints (suggestions, sentiment)
+app.use('/api/ml', require('./routes/ml'));
+
 
 // SLA worker (start)
 require('./workers/slaWorker')
+
+// Initialize embedding model (optional for servers with enough resources)
+const embedder = require('./utils/embedder')
+embedder.init().catch(err => console.warn('Embedding model init failed:', err.message))
 
 // Error handler (must come after routes)
 const errorHandler = require('./middleware/errorHandler')

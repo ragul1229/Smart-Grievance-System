@@ -32,6 +32,18 @@ router.get('/', protect, requireRole(['admin']), asyncHandler(async (req, res) =
     { $limit: 10 }
   ])
 
+  // top categories in last 30 days (trend identification)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const recentByCategory = await Grievance.aggregate([
+    { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+    { $group: { _id: '$category', count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: 10 }
+  ])
+
+  // duplicate stats
+  const duplicateCount = await Grievance.countDocuments({ isDuplicate: true })
+
   // complaints by officer
   const byOfficer = await Grievance.aggregate([
     { $match: { assignedOfficer: { $exists: true, $ne: null } } },
@@ -41,7 +53,7 @@ router.get('/', protect, requireRole(['admin']), asyncHandler(async (req, res) =
     { $project: { officerId: '$_id', officerName: '$officer.name', total: 1, resolved: 1 } }
   ])
 
-  res.json({ counts, avgResolutionHours: avgResolutionMs / (1000 * 60 * 60), byCategory, slaViolations, byOfficer, highPriority, repeated })
+  res.json({ counts, avgResolutionHours: avgResolutionMs / (1000 * 60 * 60), byCategory, recentByCategory, duplicateCount, slaViolations, byOfficer, highPriority, repeated })
 }))
 
 module.exports = router
